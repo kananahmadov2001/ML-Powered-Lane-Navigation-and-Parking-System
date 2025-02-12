@@ -1,2 +1,2 @@
-# Autonomous PiCar with Traffic Light Recognition, Lane Detection, and Parallel Parking Capabilities
+# Autonomous PiCar: ML-Powered Lane Navigation & Parking System
 IN PROGRESS
