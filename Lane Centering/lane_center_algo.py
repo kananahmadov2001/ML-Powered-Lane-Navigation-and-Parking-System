@@ -1,40 +1,42 @@
-import cv2  # OpenCV for image processing
-import numpy as np  # NumPy for numerical operations
-import os  # OS module for file path handling
-import math  # Math module for trigonometric calculations
+import cv2
+import numpy as np
+import os
+import math
 
-# Proportional Gain for Steering Correction
-Kp = 2  # Tune this value to adjust how aggressively the car corrects its position
+# proportional gain for steering correction
+Kp = 2
 
 def apply_region_of_interest(image):
-    """Applies a mask to keep only the road section."""
-    height, width = image.shape[:2]  # Get image dimensions
-    mask = np.zeros_like(image)  # Create an empty black mask of the same size as the image
-
-    # Define a polygon to isolate the road area
-    polygon = np.array([
-        [(0, height), (width, height), (int(0.6 * width), int(0.6 * height)), (int(0.4 * width), int(0.6 * height))]
-    ], np.int32)  # The polygon defines a trapezoidal region of interest (the road section)
-
-    cv2.fillPoly(mask, polygon, 255)  # Fill the defined polygon with white (255)
-    masked_image = cv2.bitwise_and(image, mask)  # Apply the mask to the image
-    return masked_image  # Return the masked image
+    """ This function takes an image (grayscale) input, then applies a mask to keep only the road section """
+    height, width = image.shape[:2]  # getting height and width
+    mask = np.zeros_like(image)      # creating black mask
+    # creating a polygon (trapezoid) to isolate the road area (where lane markings are expected)
+    polygon = np.array([[(0, height), (width, height), (int(0.6 * width), int(0.6 * height)), (int(0.4 * width), int(0.6 * height))]], np.int32)
+    # (0, height) is bottom left
+    # (width, height) is bottom right
+    # (int(0.6 * width), int(0.6 * height)) is top right
+    # (int(0.4 * width), int(0.6 * height)) is top left
+    cv2.fillPoly(mask, polygon, 255)              # filling the polygon with white
+    masked_image = cv2.bitwise_and(image, mask)   # applying the mask to the image
+    return masked_image
 
 def extrapolate_lines(lines, height):
-    """Extend detected lane lines to cover the full road"""
-    if len(lines) == 0:
-        return None  # If no lines detected, return None
+    """ This function extends detected lane lines to cover the full road """
+    if len(lines) == 0:  # edge case: if no lines detected
+        return None
     x_coords = []
     y_coords = []
     for line in lines:
-        x_coords.extend([line[0], line[2]])  # Collect all x-coordinates of detected lane lines
-        y_coords.extend([line[1], line[3]])  # Collect all y-coordinates of detected lane lines
-    poly = np.polyfit(y_coords, x_coords, 1)  # Fit a straight line (y = mx + b) to the points
-    y1 = height  # Bottom of the image (road level)
-    y2 = int(0.6 * height)  # Extend the line up to 60% of the image height
-    x1 = int(np.polyval(poly, y1))  # Calculate x-coordinates of the line at y1
-    x2 = int(np.polyval(poly, y2))  # Calculate x-coordinates of the line at y2
-    return (x1, y1, x2, y2)  # Return both points representing the extrapolated lane line
+        # line data format will be like line = (x1, y1, x2, y2)
+        x_coords.extend([line[0], line[2]])      # x-coordinates of detected lane lines, x1 (start) and x2 (end)
+        y_coords.extend([line[1], line[3]])      # y-coordinates of detected lane lines, y1 (start) and y2 (end)
+    
+    poly = np.polyfit(y_coords, x_coords, 1)     # fitting a line using least squares (x = ym + b) to the points because lanes are mostly vertical
+    y1 = height                                  # bottom of the image
+    y2 = int(0.6 * height)                       # extending the line up to 60% of the image height
+    x1 = int(np.polyval(poly, y1))               # calculating x-coordinates of the line at y1
+    x2 = int(np.polyval(poly, y2))               # calculating x-coordinates of the line at y2
+    return (x1, y1, x2, y2)
 
 def classify_and_draw_lanes(image_path):
     """Detects lane lines, computes lane center, applies steering correction, and saves the image."""
@@ -130,19 +132,15 @@ def classify_and_draw_lanes(image_path):
     return output_image  # Return the processed image with lane markings and steering information
 
 def main():
-    input_image = input("Enter the input image file path: ")  # Ask the user for an image file
-
-    output_image = classify_and_draw_lanes(input_image)  # Process the image
-
+    input_image = input("input image file path: ")
+    output_image = classify_and_draw_lanes(input_image)
     if output_image is not None:
-        # Save the processed image with a new filename
         directory, filename = os.path.split(input_image)
         name, ext = os.path.splitext(filename)
         output_filename = f"{name}_steering{ext}"
         output_path = os.path.join(directory, output_filename)
-
         cv2.imwrite(output_path, output_image)
-        print(f"\nProcessed Image Saved at: {output_path}")
+        print(f"\nOutput Image Saved at: {output_path}")
 
 if __name__ == "__main__":
-    main()  # Run the main function
+    main()
