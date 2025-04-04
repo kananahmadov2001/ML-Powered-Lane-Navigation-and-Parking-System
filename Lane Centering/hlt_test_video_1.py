@@ -34,7 +34,7 @@ def classify_lanes_live(low_threshold, high_threshold):
         lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=50, minLineLength=50, maxLineGap=20)
 
         # Convert grayscale to color image for visualizing results
-        # output_image = cv2.cvtColor(flipped, cv2.COLOR_GRAY2BGR)
+        output_image = cv2.cvtColor(flipped, cv2.COLOR_GRAY2BGR)
 
         left_lines = []
         right_lines = []
