@@ -1,16 +1,34 @@
 import cv2
 import numpy as np
+import math
 import time
 
-# Configuration
-output_width = 1000                        # Width of bird’s-eye view in pixels
-output_height = 600                        # Height of bird’s-eye view in pixels
-lane_width_cm = 40                         # Measured real-world lane width
-cm_per_px = lane_width_cm / output_width   # Updated scale
+# Parameters
+lookahead_distance = 240  # Can be tuned (in pixels or real-world units if mapped)
+Kp = 0.5  # Steering control gain
 
-def classify_lanes_live(low_threshold, high_threshold):
+# Canny Edge Detector function
+def canyEdgeDetector(image):
+    edged = cv2.Canny(image, 50, 150)
+    return edged
+
+# Region of Interest (ROI) Masking function
+def getROI(image):
+    height, width = image.shape[:2]
+    triangle = np.array([[
+        (100, int(height*0.75)),
+        (width, int(height*0.75)),
+        (int(width / 2 + 200), int(height / 2.1))
+    ]], dtype=np.int32)
+
+    black_image = np.zeros_like(image)
+    mask = cv2.fillPoly(black_image, triangle, 255)
+    masked_image = cv2.bitwise_and(image, mask)
+    return masked_image
+
+# Lane classification and angle computation
+def classify_lanes_live():
     cap = cv2.VideoCapture(0)
-
     if not cap.isOpened():
         print("Error: Could not open video stream.")
         return
@@ -23,36 +41,21 @@ def classify_lanes_live(low_threshold, high_threshold):
         if not ret:
             break
 
-        frame = cv2.flip(frame, 0)
-        height, width = frame.shape[:2]
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        flipped = cv2.flip(gray, 0)
+        height, width = flipped.shape[:2]
 
-        # Define source points (tweak these if needed)
-        src = np.float32([
-            [width * 0.45, height * 0.65],   # top-left
-            [width * 0.55, height * 0.65],   # top-right
-            [width * 0.1, height * 0.95],    # bottom-left
-            [width * 0.9, height * 0.95]     # bottom-right
-        ])
+        # Step 1: Edge detection
+        edges = canyEdgeDetector(flipped)
 
-        # Define destination points for warped top-down view
-        dst = np.float32([
-            [0, 0],
-            [output_width, 0],
-            [0, output_height],
-            [output_width, output_height]
-        ])
+        # Step 2: ROI mask applied after edge detection
+        roi_edges = getROI(edges)
 
-        # Perspective transform matrix + warp
-        M = cv2.getPerspectiveTransform(src, dst)
-        warped = cv2.warpPerspective(frame, M, (output_width, output_height))
+        # Step 3: Detect lines
+        lines = cv2.HoughLinesP(roi_edges, 1, np.pi / 180, threshold=50, minLineLength=50, maxLineGap=20)
 
-        gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, low_threshold, high_threshold)
-        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=50, minLineLength=50, maxLineGap=20)
-
-        output_image = warped.copy()
-        left_lines = []
-        right_lines = []
+        output_image = cv2.cvtColor(flipped, cv2.COLOR_GRAY2BGR)
+        left_lines, right_lines = [], []
 
         if lines is not None:
             for line in lines:
@@ -67,30 +70,38 @@ def classify_lanes_live(low_threshold, high_threshold):
                         cv2.line(output_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
         if left_lines and right_lines:
-            left_x_bottom = int(np.mean([min(x1, x2) for (x1, y1, x2, y2) in left_lines]))
-            right_x_bottom = int(np.mean([max(x1, x2) for (x1, y1, x2, y2) in right_lines]))
+            left_x_bottom = int(np.mean([min(line[0], line[2]) for line in left_lines]))
+            right_x_bottom = int(np.mean([max(line[0], line[2]) for line in right_lines]))
 
             lane_center = (left_x_bottom + right_x_bottom) // 2
-            cam_center = output_width // 2
+            cam_center = width // 2
             offset = lane_center - cam_center
             dist_to_left = cam_center - left_x_bottom
             dist_to_right = right_x_bottom - cam_center
 
-            # Convert pixel distances to centimeters
-            offset_cm = offset * cm_per_px
-            dist_to_left_cm = dist_to_left * cm_per_px
-            dist_to_right_cm = dist_to_right * cm_per_px
+            # Draw lines
+            cv2.line(output_image, (lane_center, height - 10), (lane_center, height - 50), (0, 255, 255), 2)
+            cv2.line(output_image, (cam_center, height - 10), (cam_center, height - 50), (255, 255, 255), 2)
 
+            # Angle calculations
+            camera_angle_rad = math.atan2(offset, lookahead_distance)
+            camera_angle_deg = math.degrees(camera_angle_rad)
+            steering_angle = Kp * camera_angle_deg
+
+            # Print every 0.5 seconds
             current_time = time.time()
             if current_time - last_print_time >= 0.5:
-                print(f"[INFO] Offset from Lane Center: {offset_cm:.2f} cm")
-                print(f"[INFO] ← Left Lane Distance: {dist_to_left_cm:.2f} cm")
-                print(f"[INFO] → Right Lane Distance: {dist_to_right_cm:.2f} cm\n")
+                print(f"[INFO] Offset: {offset} px")
+                print(f"[INFO] ← Left Lane Distance: {dist_to_left} px")
+                print(f"[INFO] → Right Lane Distance: {dist_to_right} px")
+                print(f"[INFO] Camera Angle: {camera_angle_deg:.2f}°")
+                print(f"[INFO] Steering Angle (Kp*offset): {steering_angle:.2f}°\n")
                 last_print_time = current_time
 
-        # Display views
-        cv2.imshow("Original View", frame)
-        cv2.imshow("Bird’s-Eye View", output_image)
+        # Show outputs
+        cv2.imshow("Original", frame)
+        cv2.imshow("ROI + Canny Edges", roi_edges)
+        cv2.imshow("Lane Classification + Distances", output_image)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -98,15 +109,9 @@ def classify_lanes_live(low_threshold, high_threshold):
     cap.release()
     cv2.destroyAllWindows()
 
+# Main entry point
 def main():
-    try:
-        low_threshold = int(input("Enter low Canny threshold (0-255): "))
-        high_threshold = int(input("Enter high Canny threshold (0-255): "))
-    except ValueError:
-        print("Invalid input. Please enter integers.")
-        return
-
-    classify_lanes_live(low_threshold, high_threshold)
+    classify_lanes_live()
 
 if __name__ == "__main__":
     main()
