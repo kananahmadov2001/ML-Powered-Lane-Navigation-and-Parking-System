@@ -1,5 +1,5 @@
-Will most likely utilize Profile #3 of the ESC (50% Forward, 100% Brakes, 50% Reverse)
--------------------------------------------------------------------------------------------------------------------------------
+#Will most likely utilize Profile #3 of the ESC (50% Forward, 100% Brakes, 50% Reverse)
+#-------------------------------------------------------------------------------------------------------------------------------
 #Test ESC / Motor at a very low speed
 
 import math
