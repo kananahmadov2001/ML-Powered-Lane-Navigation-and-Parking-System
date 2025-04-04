@@ -25,7 +25,7 @@ def main():
     pca = initialize_pca()
     
     print("Running motor forward at low speed...")
-    set_motor_speed(pca, 0.12)
+    set_motor_speed(pca, 0.12) #CHANGE THIS FOR SPEED, LOWEST IS USUALLY 0.12.
     time.sleep(5)
 
     print("Stopping motor.")
