@@ -1,0 +1,63 @@
+import time
+import math
+from board import SCL, SDA
+import busio
+from adafruit_motor import servo
+from adafruit_pca9685 import PCA9685
+
+# === Servo Helper ===
+def delta_to_servo_angle(angle_deg):
+    """Map steering angle in degrees (-30° to 30°) to servo angle (45° to 135°)."""
+    servo_angle = 90 + (angle_deg / 30.0) * 45.0
+    return max(45, min(135, servo_angle))
+
+# === PCA9685 Setup ===
+def initialize_pca():
+    i2c_bus = busio.I2C(SCL, SDA)
+    pca = PCA9685(i2c_bus)
+    pca.frequency = 100
+    return pca
+
+# === Motor Control ===
+def set_motor_speed(pca, percent):
+    """Send PWM duty cycle to ESC on channel 15 based on speed percent (-1.0 to 1.0)."""
+    duty = ((percent) * 3277) + 65535 * 0.15
+    duty = max(0, min(65535, duty))  # Clamp
+    pca.channels[15].duty_cycle = math.floor(duty)
+    print(f"[MOTOR] Speed = {percent:.2f}, duty = {duty:.0f}")
+
+# === Main Execution ===
+def main():
+    pca = initialize_pca()
+    steering_servo = servo.Servo(pca.channels[14], min_pulse=500, max_pulse=2400)
+
+    try:
+        # Start moving forward
+        set_motor_speed(pca, 0.14)
+
+        # Sweep from +45 to -45 degrees
+        for angle in range(45, -46, -5):
+            servo_angle = delta_to_servo_angle(angle)
+            steering_servo.angle = servo_angle
+            print(f"[STEERING] {angle}° → Servo: {servo_angle:.1f}°")
+            time.sleep(0.1)
+
+        # Sweep back from -45 to +45 degrees
+        for angle in range(-45, 46, 5):
+            servo_angle = delta_to_servo_angle(angle)
+            steering_servo.angle = servo_angle
+            print(f"[STEERING] {angle}° → Servo: {servo_angle:.1f}°")
+            time.sleep(0.1)
+
+    finally:
+        print("[SHUTDOWN] Turning left for 2s, then stopping motor...")
+        steering_servo.angle = delta_to_servo_angle(-45)
+        set_motor_speed(pca, 0.14)
+        time.sleep(2)
+        set_motor_speed(pca, 0.0)
+        steering_servo.angle = 90
+        pca.deinit()
+        print("[SHUTDOWN] Motors stopped, steering centered.")
+
+if __name__ == "__main__":
+    main()
