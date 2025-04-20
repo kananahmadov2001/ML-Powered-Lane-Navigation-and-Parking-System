@@ -38,7 +38,7 @@ def lane_centering():
         return
 
     pca = initialize_pca9685()
-    set_motor_speed(pca, 0.15)  # Start moving forward slowly
+    #set_motor_speed(pca, 0.15)  # Start moving forward slowly
 
     print("[INFO] Starting lane-centering without ROI... Press Ctrl+C to stop.")
     try:
@@ -94,7 +94,7 @@ def lane_centering():
         print("[INFO] Keyboard interrupt. Stopping...")
 
     # Stop on exit
-    set_motor_speed(pca, 0)
+    #set_motor_speed(pca, 0)
     set_steering(pca, 0)
     cap.release()
     print("[INFO] Car stopped.")
